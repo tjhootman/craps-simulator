@@ -50,7 +50,7 @@
 
         <div class="control-group wide-input">
             <label style="color: #fca5a5;">Betting Strategy</label>
-            <select id="strategy">
+            <select id="strategy" onchange="updateInfoCards()">
                 <option value="pass_odds">Pass Line + Max Odds</option>
                 <option value="iron_cross">Iron Cross (Action)</option>
                 <option value="place_68">Place 6 & 8</option>
@@ -59,7 +59,7 @@
         </div>
         <div class="control-group wide-input">
             <label style="color: #67e8f9;">Profit Strategy</label>
-            <select id="pressMode">
+            <select id="pressMode" onchange="updateInfoCards()">
                 <option value="collect">Collect (Safe)</option>
                 <option value="press_half">Press Half (Balanced)</option>
                 <option value="press_full">Power Press (Risky)</option>
@@ -67,6 +67,11 @@
         </div>
 
         <button id="runBtn" onclick="handleRun()">Roll The Dice</button>
+    </div>
+
+    <div class="info-grid">
+        <div class="info-card" id="strategyInfo"><strong>Strategy</strong><p>...</p></div>
+        <div class="info-card" id="pressInfo"><strong>Profit Strategy</strong><p>...</p></div>
     </div>
 
     <div class="stats-bar">
@@ -85,6 +90,24 @@
     let myChart = null;
     const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
     const ODDS_PAYOUT = { 4: 2, 10: 2, 5: 1.5, 9: 1.5, 6: 1.2, 8: 1.2 }; 
+    const STRAT_DESC = {
+        pass_odds: "<strong>Pass Line + Odds.</strong> Low edge. Wins on Point. Losses on 7.",
+        iron_cross: "<strong>Iron Cross.</strong> Wins every roll except 7. High frequency.",
+        place_68: "<strong>Place 6 & 8.</strong> Bets $12 on 6/8. Takes down on 7.",
+        dark_side: "<strong>Dark Side.</strong> Don't Pass. Wins on 7. Loses on Point."
+    };
+    const PRESS_DESC = {
+        collect: "<strong>Collect.</strong> Never increase bets. Safe but slow.",
+        press_half: "<strong>Press Half.</strong> Increase bet by 50% of win. Collect the rest.",
+        press_full: "<strong>Power Press.</strong> Re-invest 100% of win. Huge spikes, huge crashes."
+    };
+
+    function updateInfoCards() {
+        const strat = document.getElementById('strategy').value;
+        const press = document.getElementById('pressMode').value;
+        document.getElementById('strategyInfo').innerHTML = `<p>${STRAT_DESC[strat]}</p>`;
+        document.getElementById('pressInfo').innerHTML = `<p>${PRESS_DESC[press]}</p>`;
+    }
 
     function handleRun() {
         const btn = document.getElementById('runBtn');
@@ -108,12 +131,6 @@
         const allDatasets = [];
         let finalSum = 0; let maxWin = 0; let ruinedCount = 0;
 
-        // CALCULATE TRUE MINIMUM COST PER STRATEGY
-        let minStrategyCost = minBet; // Default
-        if (strategy === 'iron_cross') minStrategyCost = minBet * 4.4; // $44 for $10 table (Field, 5, 6, 8)
-        if (strategy === 'place_68') minStrategyCost = minBet * 2.4; // $24 for $10 table
-        // Pass/Dark Side remains minBet
-
         for (let s = 0; s < sims; s++) {
             let cash = bankroll;
             let currentData = [{x: 0, y: cash}];
@@ -123,8 +140,10 @@
             let unitSize = minBet; 
 
             for (let r = 1; r <= maxRolls; r++) {
-                // THE FIX: Use Strategy Cost, not just $0
-                if (cash < minStrategyCost) { isRuined = true; cash = 0; }
+                // FIXED RUIN: You are ruined if you can't afford a single minimum bet
+                if (cash < minBet && Object.keys(activeBets).length === 0) { 
+                    isRuined = true; cash = 0; 
+                }
                 
                 if (!isRuined) {
                     // RESET LOGIC
@@ -136,7 +155,6 @@
                     let winnings = 0;
                     let losses = 0;
 
-                    // 1. GAME EVENT
                     let event = 'neutral'; 
                     if (point === 0) {
                         if (roll === 7 || roll === 11) event = 'natural';
@@ -147,43 +165,43 @@
                         else if (roll === 7) { event = 'seven_out'; point = 0; }
                     }
 
-                    // 2. PLACE BETS
+                    // 2. PLACE BETS (FIXED: Force bets if we have cash, even partial)
                     if (point === 0) {
-                        if (event === 'natural' || event === 'craps' || event === 'seven_out' || event === 'point_hit') {
-                            unitSize = minBet; 
-                        }
+                        if (event === 'natural' || event === 'craps' || event === 'seven_out' || event === 'point_hit') { unitSize = minBet; }
                         if (strategy === 'pass_odds' && !activeBets.pass) { cash -= minBet; activeBets.pass = minBet; }
                         if (strategy === 'dark_side' && !activeBets.dontpass) { cash -= minBet; activeBets.dontpass = minBet; }
                     } 
                     else {
                         function updateBet(betKey, targetAmt) {
                             if (!activeBets[betKey]) { 
-                                activeBets[betKey] = targetAmt; cash -= targetAmt; 
+                                // FORCE BET: If we have cash, we place it.
+                                if (cash >= targetAmt) { activeBets[betKey] = targetAmt; cash -= targetAmt; }
                             } else if (activeBets[betKey] < targetAmt) {
-                                cash -= (targetAmt - activeBets[betKey]); activeBets[betKey] = targetAmt;
+                                if (cash >= (targetAmt - activeBets[betKey])) { cash -= (targetAmt - activeBets[betKey]); activeBets[betKey] = targetAmt; }
                             } else if (activeBets[betKey] > targetAmt) {
                                 cash += (activeBets[betKey] - targetAmt); activeBets[betKey] = targetAmt;
                             }
                         }
 
-                        if (strategy === 'pass_odds' && activeBets.pass && cash > unitSize * 3) {
+                        if (strategy === 'pass_odds' && activeBets.pass && cash >= unitSize * 3) {
                             if (!activeBets.odds) { activeBets.odds = unitSize * 3; cash -= activeBets.odds; }
                         }
 
-                        if (strategy === 'place_68' && cash > (unitSize+2)*2) {
+                        if (strategy === 'place_68') {
                             if (point !== 6) updateBet('place6', unitSize + 2);
                             if (point !== 8) updateBet('place8', unitSize + 2);
                         }
 
-                        if (strategy === 'iron_cross' && cash > unitSize * 4) {
+                        if (strategy === 'iron_cross') {
                             if (point !== 5) updateBet('place5', unitSize);
                             if (point !== 6) updateBet('place6', unitSize + 2);
                             if (point !== 8) updateBet('place8', unitSize + 2);
-                            if (!activeBets.field) { activeBets.field = unitSize; cash -= unitSize; }
+                            // FIELD IS PRIORITY: Always try to place field first
+                            if (!activeBets.field && cash >= unitSize) { activeBets.field = unitSize; cash -= unitSize; }
                         }
                     }
 
-                    // 3. RESOLVE
+                    // 3. RESOLVE PAYOUTS
                     if (activeBets.pass) {
                         if (event === 'natural') winnings += activeBets.pass;
                         else if (event === 'craps') { losses += activeBets.pass; delete activeBets.pass; }
@@ -219,7 +237,7 @@
                         }
                     }
 
-                    // 4. PRESS
+                    // 4. PRESS LOGIC
                     if (winnings > 0) {
                         cash += winnings;
                         if (unitSize < pressLimit) {
@@ -280,5 +298,9 @@
         });
     }
 
+    updateInfoCards();
     handleRun();
 </script>
+
+</body>
+</html>
