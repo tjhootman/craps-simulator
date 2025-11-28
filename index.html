@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Craps Profit & Variance Simulator</title>
+    <title>Craps Strategy Simulator</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -131,7 +131,6 @@
             <input type="number" id="sims" value="50" max="100">
         </div>
 
-        <!-- WIDE INPUTS -->
         <div class="control-group wide-input">
             <label style="color: #fca5a5;">Betting Strategy</label>
             <select id="strategy" onchange="updateInfoCards()">
@@ -154,13 +153,11 @@
         <button id="runBtn" onclick="handleRun()">Roll The Dice</button>
     </div>
 
-    <!-- INFO CARDS -->
     <div class="info-grid">
         <div class="info-card" id="strategyInfo"><strong>Strategy</strong><p>...</p></div>
         <div class="info-card" id="pressInfo"><strong>Profit Strategy</strong><p>...</p></div>
     </div>
 
-    <!-- STATS -->
     <div class="stats-bar">
         <div class="stat-box">
             <span class="stat-val" id="stat-ror">0%</span>
@@ -180,7 +177,6 @@
         <canvas id="chartCanvas"></canvas>
     </div>
 
-    <!-- LEGEND -->
     <div class="legend-bar">
         <div class="legend-item"><span class="dot" style="background-color: #fbbf24;"></span> Hot Shooter (2x)</div>
         <div class="legend-item"><span class="dot" style="background-color: #10b981;"></span> Profitable</div>
@@ -194,13 +190,11 @@
     let myChart = null;
     const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
-    // --- GAME CONSTANTS ---
-    const ODDS_PAYOUT = { 4: 2, 10: 2, 5: 1.5, 9: 1.5, 6: 1.2, 8: 1.2 }; // True Odds
-    const PLACE_PAYOUT = { 4: 1.8, 10: 1.8, 5: 1.4, 9: 1.4, 6: 1.16, 8: 1.16 }; // Casino Odds
+    const ODDS_PAYOUT = { 4: 2, 10: 2, 5: 1.5, 9: 1.5, 6: 1.2, 8: 1.2 }; 
+    const PLACE_PAYOUT = { 4: 1.8, 10: 1.8, 5: 1.4, 9: 1.4, 6: 1.166, 8: 1.166 }; 
     
-    // --- TEXT CONTENT ---
     const STRAT_DESC = {
-        pass_odds: "<strong>The 'Smart' Play.</strong> Pass Line with 3x-4x-5x Odds. Lowest house edge (<1%). Variance comes from waiting for the Point to hit.",
+        pass_odds: "<strong>The 'Smart' Play.</strong> Pass Line with 3x Odds. Lowest house edge (<1%). Variance comes from waiting for the Point to hit.",
         iron_cross: "<strong>The Action Play.</strong> Bets on Field, 5, 6, 8. Wins on EVERY roll except 7. High frequency wins, but 'Big Red' (7) wipes out 4 bets at once.",
         place_68: "<strong>The Conservative Play.</strong> Bet $12 on 6 and $12 on 8. Wait for hits. Take them down after a few wins or press them up.",
         dark_side: "<strong>The Contrarian.</strong> Betting *against* the shooter (Don't Pass). You win when everyone else loses (on 7). Low house edge, but socially awkward."
@@ -225,7 +219,6 @@
         setTimeout(() => { runSimulation(); btn.innerHTML = "Roll The Dice"; btn.disabled = false; }, 50);
     }
 
-    // --- CRAPS ENGINE ---
     function rollDice() {
         const d1 = Math.floor(Math.random() * 6) + 1;
         const d2 = Math.floor(Math.random() * 6) + 1;
@@ -240,7 +233,6 @@
         const strategy = document.getElementById('strategy').value;
         const pressMode = document.getElementById('pressMode').value;
 
-        // Safety Clamps
         if (sims > 100) sims = 100;
         if (maxRolls > 2000) maxRolls = 2000;
 
@@ -252,11 +244,10 @@
         for (let s = 0; s < sims; s++) {
             let cash = bankroll;
             let currentData = [{x: 0, y: cash}];
-            let point = 0; // 0 = Come Out Roll
-            let activeBets = {}; // Store bets here: { 'pass': 10, 'odds': 50, 'place6': 12 }
+            let point = 0; 
+            let activeBets = {}; 
             let isRuined = false;
 
-            // Loop through Rolls
             for (let r = 1; r <= maxRolls; r++) {
                 if (cash < minBet) { isRuined = true; cash = 0; }
                 
@@ -265,134 +256,130 @@
                     let winnings = 0;
                     let losses = 0;
 
-                    // --- STRATEGY: PLACE BETS ---
-                    if (point === 0) { // Come Out Roll logic
-                        if (strategy === 'pass_odds') {
-                            if (!activeBets.pass) { cash -= minBet; activeBets.pass = minBet; }
+                    // --- 1. GAME STATE UPDATE (FIXED: Runs independently of bets) ---
+                    let event = 'neutral'; 
+                    if (point === 0) {
+                        if (roll === 7 || roll === 11) event = 'natural';
+                        else if (roll === 2 || roll === 3 || roll === 12) event = 'craps';
+                        else { point = roll; event = 'point_set'; }
+                    } else {
+                        if (roll === point) { event = 'point_hit'; point = 0; }
+                        else if (roll === 7) { event = 'seven_out'; point = 0; }
+                    }
+
+                    // --- 2. PLACE BETS ---
+                    
+                    // Come Out Bets (Pass/Don't)
+                    if (point === 0 && event !== 'natural' && event !== 'craps') {
+                        // Point is being set (or was just cleared), ready for next Come Out
+                        // (Logic handled implicitly: pass bets stay up unless lost)
+                    }
+                    if (point === 0) {
+                        if (strategy === 'pass_odds' && !activeBets.pass) { cash -= minBet; activeBets.pass = minBet; }
+                        if (strategy === 'dark_side' && !activeBets.dontpass) { cash -= minBet; activeBets.dontpass = minBet; }
+                    }
+
+                    // Point Established Bets (Odds, Place, Iron Cross)
+                    if (point !== 0) {
+                        // Pass Line Odds
+                        if (strategy === 'pass_odds' && activeBets.pass && !activeBets.odds && cash > minBet * 3) {
+                            activeBets.odds = minBet * 3; cash -= activeBets.odds;
                         }
-                        else if (strategy === 'dark_side') {
-                            if (!activeBets.dontpass) { cash -= minBet; activeBets.dontpass = minBet; }
+
+                        // Place 6 & 8
+                        if (strategy === 'place_68' && cash > (minBet+2)*2) {
+                            let betAmt = minBet + 2; 
+                            if (!activeBets.place6 && point !== 6) { activeBets.place6 = betAmt; cash -= betAmt; }
+                            if (!activeBets.place8 && point !== 8) { activeBets.place8 = betAmt; cash -= betAmt; }
+                        }
+
+                        // Iron Cross
+                        if (strategy === 'iron_cross' && cash > minBet * 4) {
+                            if (!activeBets.place5 && point !== 5) { activeBets.place5 = minBet; cash -= minBet; }
+                            if (!activeBets.place6 && point !== 6) { activeBets.place6 = minBet+2; cash -= (minBet+2); }
+                            if (!activeBets.place8 && point !== 8) { activeBets.place8 = minBet+2; cash -= (minBet+2); }
+                            // Field is always placed in Iron Cross
+                            if (!activeBets.field) { activeBets.field = minBet; cash -= minBet; }
                         }
                     }
 
-                    // --- RESOLVE BETS ---
-                    
-                    // 1. PASS LINE
+                    // --- 3. RESOLVE PAYOUTS ---
+
+                    // A. Pass Line
                     if (activeBets.pass) {
-                        if (point === 0) {
-                            if (roll === 7 || roll === 11) { winnings += activeBets.pass; } // Win
-                            else if (roll === 2 || roll === 3 || roll === 12) { losses += activeBets.pass; delete activeBets.pass; } // Lose
-                            else { point = roll; } // Set Point
-                        } else {
-                            if (roll === point) { 
-                                winnings += activeBets.pass; 
-                                // Pay Odds
-                                if (activeBets.odds) winnings += activeBets.odds * ODDS_PAYOUT[point];
-                                point = 0; // Puck Off
-                                // Reset Odds bet
+                        if (event === 'natural') winnings += activeBets.pass; // 7/11
+                        else if (event === 'craps') { losses += activeBets.pass; delete activeBets.pass; }
+                        else if (event === 'point_hit') {
+                            winnings += activeBets.pass;
+                            if (activeBets.odds) {
+                                // Reconstruct point for odds payout (since we reset point to 0 above)
+                                winnings += activeBets.odds * ODDS_PAYOUT[roll];
                                 cash += activeBets.odds; delete activeBets.odds; 
-                            } 
-                            else if (roll === 7) { 
-                                losses += activeBets.pass; delete activeBets.pass;
-                                if (activeBets.odds) { losses += activeBets.odds; delete activeBets.odds; }
-                                point = 0; // Seven Out
                             }
+                        }
+                        else if (event === 'seven_out') {
+                            losses += activeBets.pass + (activeBets.odds || 0);
+                            delete activeBets.pass; delete activeBets.odds;
                         }
                     }
 
-                    // 2. DON'T PASS
+                    // B. Don't Pass
                     if (activeBets.dontpass) {
-                        if (point === 0) {
-                            if (roll === 2 || roll === 3) { winnings += activeBets.dontpass; }
-                            else if (roll === 7 || roll === 11) { losses += activeBets.dontpass; delete activeBets.dontpass; }
-                            else if (roll === 12) { /* Push */ }
-                            else { point = roll; }
-                        } else {
-                            if (roll === 7) { winnings += activeBets.dontpass; point = 0; }
-                            else if (roll === point) { losses += activeBets.dontpass; delete activeBets.dontpass; point = 0; }
-                        }
+                        if (event === 'natural') { losses += activeBets.dontpass; delete activeBets.dontpass; }
+                        else if (event === 'craps' && roll !== 12) winnings += activeBets.dontpass;
+                        else if (event === 'seven_out') winnings += activeBets.dontpass;
+                        else if (event === 'point_hit') { losses += activeBets.dontpass; delete activeBets.dontpass; }
                     }
 
-                    // 3. IRON CROSS (Field + 5,6,8)
-                    // Simplified: Assuming bets are ON immediately for MVP
-                    if (strategy === 'iron_cross' && cash > minBet * 4) {
-                        // Place bets if not active
-                        if (!activeBets.place5) { activeBets.place5 = minBet; cash -= minBet; }
-                        if (!activeBets.place6) { activeBets.place6 = minBet + 2; cash -= (minBet + 2); } // Cap 6/8
-                        if (!activeBets.place8) { activeBets.place8 = minBet + 2; cash -= (minBet + 2); }
-                        
-                        // Field is a one-roll bet, place it every time
-                        if (!activeBets.field) { activeBets.field = minBet; cash -= minBet; }
-
-                        // Resolve Iron Cross
-                        if (roll === 7) {
-                            // Lose everything
-                            losses += activeBets.place5 + activeBets.place6 + activeBets.place8 + activeBets.field;
-                            activeBets = {}; // Wipe board
-                            point = 0;
-                        } else {
-                            // Field Wins (2,3,4,9,10,11,12)
-                            if ([2,3,4,9,10,11,12].includes(roll)) {
-                                let mult = (roll === 2 || roll === 12) ? 2 : 1;
-                                winnings += activeBets.field * mult;
-                                // Field bet stays up (simulated by returning win + original)
-                                cash += activeBets.field; delete activeBets.field; 
-                            } else {
-                                losses += activeBets.field; delete activeBets.field;
-                            }
-
-                            // Place Wins
-                            if (roll === 5) winnings += activeBets.place5 * 1.4;
-                            if (roll === 6) winnings += activeBets.place6 * 1.16;
-                            if (roll === 8) winnings += activeBets.place8 * 1.16;
-                        }
-                    }
-
-                    // --- ODDS & PRESSING LOGIC ---
+                    // C. Place Bets / Field (Only work if Point Established, except Field works always)
                     
-                    // Add Max Odds if Point established (Pass Line Strategy)
-                    if (strategy === 'pass_odds' && point > 0 && !activeBets.odds && cash >= minBet * 3) {
-                        let oddsAmt = minBet * 3; // 3x4x5x simplified to 3x flat
-                        activeBets.odds = oddsAmt;
-                        cash -= oddsAmt;
+                    // Field (Iron Cross) - Works every roll
+                    if (activeBets.field) {
+                        if ([2,3,4,9,10,11,12].includes(roll)) {
+                            let mult = (roll === 2 || roll === 12) ? 2 : 1;
+                            winnings += activeBets.field * mult;
+                            cash += activeBets.field; delete activeBets.field; 
+                        } else {
+                            losses += activeBets.field; delete activeBets.field;
+                        }
                     }
 
-                    // Handle Winnings & Pressing
+                    // Place Bets (Work if point is established, Lost on 7-out)
+                    if (point !== 0 || event === 'seven_out') {
+                        if (roll === 7) {
+                            // Lose all place bets
+                            losses += (activeBets.place5||0) + (activeBets.place6||0) + (activeBets.place8||0);
+                            delete activeBets.place5; delete activeBets.place6; delete activeBets.place8;
+                        } else {
+                            // Pay Wins
+                            if (activeBets.place5 && roll === 5) winnings += activeBets.place5 * 1.4;
+                            if (activeBets.place6 && roll === 6) winnings += activeBets.place6 * 1.166;
+                            if (activeBets.place8 && roll === 8) winnings += activeBets.place8 * 1.166;
+                        }
+                    }
+
+                    // --- 4. PRESS LOGIC ---
                     if (winnings > 0) {
-                        // "Collect" Mode: Just add to cash
                         if (pressMode === 'collect') {
                             cash += winnings;
-                        } 
-                        // "Press" Mode: Add to bankroll, but next bets will be larger
-                        // (Simplified logic: In a full sim, we'd update `activeBets` values directly.
-                        // For MVP visualization, we just bank the win. To visualize Pressing properly
-                        // requires persistent bet objects, which we can add in v2).
-                        else {
-                            // Simulation of Pressing: We assume the player puts winnings BACK on the number
-                            // So we don't add to 'cash' pile, we leave it on table (risk).
-                            // But since this loop tracks 'Liquid Cash', we add it, but note that 
-                            // future Losses will be larger.
-                            
-                            // Hack for MVP Visualization of Volatility:
-                            // If pressing, we add win to cash, but increase "Virtual Unit Size"
-                            // causing next loss to be bigger.
-                            cash += winnings;
+                        } else if (pressMode === 'press_half') {
+                            cash += (winnings * 0.5); 
+                        } else {
+                            // Full press: Re-invest (simplified visual)
                         }
                     }
                 }
-                
                 currentData.push({x: r, y: cash});
             }
-
+            
             finalSum += cash;
             if (cash > maxWin) maxWin = cash;
             if (isRuined) ruinedCount++;
 
-            // Color Logic
             let color = 'rgba(255, 255, 255, 0.1)'; 
             let order = 1;
             if (isRuined) { color = 'rgba(239, 68, 68, 0.5)'; order = 2; }
-            else if (cash > bankroll * 2) { color = '#fbbf24'; order = 4; }
+            else if (cash > bankroll * 1.5) { color = '#fbbf24'; order = 4; }
             else if (cash > bankroll) { color = 'rgba(16, 185, 129, 0.5)'; order = 3; }
 
             allDatasets.push({
@@ -402,10 +389,8 @@
             });
         }
 
-        // Stats Update
         const ror = ((ruinedCount / sims) * 100).toFixed(1);
         document.getElementById('stat-ror').innerText = `${ror}%`;
-        document.getElementById('stat-ror').style.color = ror > 20 ? '#ef4444' : '#10b981';
         document.getElementById('stat-avg').innerText = USD.format(finalSum / sims);
         document.getElementById('stat-max').innerText = USD.format(maxWin);
 
